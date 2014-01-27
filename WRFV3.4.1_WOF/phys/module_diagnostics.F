@@ -27,10 +27,50 @@ CONTAINS
                      ,bucket_mm, bucket_J                             &
                      ,prec_acc_c, prec_acc_nc, snow_acc_nc            &
                      ,snowncv, prec_acc_dt, curr_secs                 &
+! RAS
+                     ,mp_physics                                      &
+                     ,history_interval                                &
+                     ,itimestep                                       &
+                     ,t,u10,v10,w,u_phy,v_phy,p,pb                    &
+                     ,wspd10max                                       &
+                     ,up_heli_max                                     &
+                     ,up_heli_max16                                   &
+                     ,up_heli_max01                                   &
+                     ,w_up_max,w_dn_max                               &
+                     ,znw,w_colmean                                   &
+                     ,numcolpts,w_mean                                &
+                     ,grpl_max,grpl_colint,refd_max                   &
+                     ,refd05,refd10,refd15,refd20                     &
+                     ,refd25,refd30,refd35,refd40                     &
+                     ,refd45,refd50,refd55,refd60                     &
+                     ,refdm10c,refdm10c_calc,refdm10c_max             &
+                     ,ltg1_max,ltg2_max,ltg3_max                      &
+                     ,ltg1,ltg2,ltg3                                  &
+                     ,ltg1_calc                                       &
+                     ,totice_colint,msft                              &
+                     ,qr_curr,qs_curr,qi_curr,qg_curr                 &
+                     ,f_rimef_phy                                     &
+                     ,rho,ph,phb,ht,dz8w                              &
+                     ,prate                                           &
+                     ,refd3d,vil2                                     &
+!                     ,refl_10cm                                       &
+                     ,grid_clock, grid_alarms                         &
+! RAS
                                                                       )
 !----------------------------------------------------------------------
 
   USE module_dm, ONLY: wrf_dm_sum_real, wrf_dm_maxval
+
+! RAS
+   USE module_state_description, ONLY :                                 &
+                    WSM6SCHEME, ETAMPNEW, THOMPSON, MORR_TWO_MOMENT,    &
+                    WDM6SCHEME, MILBRANDT2MOM
+
+   USE module_utility, ONLY: WRFU_Clock, WRFU_Alarm
+   USE module_domain, ONLY : HISTORY_ALARM, Is_alarm_tstep
+
+   USE module_model_constants
+! RAS
 
    IMPLICIT NONE
 !======================================================================
@@ -153,6 +193,111 @@ CONTAINS
    LOGICAL, EXTERNAL :: wrf_dm_on_monitor
    CHARACTER*256     :: outstring
    CHARACTER*6       :: grid_str
+! RAS
+
+   TYPE (WRFU_Clock):: grid_clock
+   TYPE (WRFU_Alarm), POINTER:: grid_alarms(:)
+
+   INTEGER, INTENT(IN) ::                                        &
+                                                     mp_physics  &
+                                    ,history_interval,itimestep
+
+   REAL, DIMENSION( kms:kme ), INTENT(IN) ::                     &
+                                                            znw
+
+   REAL, DIMENSION( ims:ime, kms:kme, jms:jme ), INTENT(IN) ::   &
+                                                              t  &
+                                                             ,w  &
+                                                   ,u_phy,v_phy  &
+                               ,qr_curr,qs_curr,qi_curr,qg_curr  &
+                                                   ,f_rimef_phy  &
+                                                           ,rho  &
+                                                        ,ph,phb  &
+                                                          ,p,pb  &
+                                                          ,dz8w
+
+   REAL, DIMENSION( ims:ime, jms:jme ), INTENT(IN) ::            &
+                                                            u10  &
+                                                           ,v10  &
+                                                            ,ht  &
+                                                          ,msft
+
+!   REAL, INTENT(IN) :: g
+
+   REAL, DIMENSION( ims:ime, jms:jme ), INTENT(INOUT) ::         &
+                                                      wspd10max  &
+                                                   ,up_heli_max  &
+                                                 ,up_heli_max16  &
+                                                 ,up_heli_max01  &
+                                             ,w_up_max,w_dn_max  &
+                                    ,w_colmean,numcolpts,w_mean  &
+                                          ,grpl_max,grpl_colint  &
+                                                      ,refd_max  &
+                                    ,ltg1_max,ltg2_max,ltg3_max  &
+                                  ,ltg1,ltg2,ltg3,totice_colint  &
+                              ,refdm10c_max,refdm10c,prate,vil2
+
+   REAL, DIMENSION( ims:ime, kms:kme, jms:jme ), INTENT(INOUT) ::&
+                                                         refd3d
+
+   REAL, DIMENSION( ims:ime, jms:jme ), INTENT(INOUT) ::         &
+                                    refd05,refd10,refd15,refd20  &
+                                   ,refd25,refd30,refd35,refd40  &
+                                   ,refd45,refd50,refd55,refd60
+
+   INTEGER, DIMENSION( ims:ime, jms:jme ), INTENT(INOUT) ::      &
+                                        ltg1_calc,refdm10c_calc
+
+   INTEGER :: i_5minavg05,i_5minavg10,i_5minavg15,i_5minavg20,i_5minavg25,i_5minavg30
+   INTEGER :: i_5minavg35,i_5minavg40,i_5minavg45,i_5minavg50,i_5minavg55,i_5minavg60
+
+   SAVE i_5minavg05,i_5minavg10,i_5minavg15,i_5minavg20,i_5minavg25,i_5minavg30
+   SAVE i_5minavg35,i_5minavg40,i_5minavg45,i_5minavg50,i_5minavg55,i_5minavg60
+
+   INTEGER :: idump, idump5min
+   INTEGER :: ithr1mx,jthr1mx,ithr2mx,jthr2mx
+   INTEGER :: ithr1,jthr1,ithr2,jthr2
+
+   REAL :: time_minutes
+   REAL :: afrac
+   REAL :: wind_vel
+   REAL :: depth
+   REAL :: tval2,tval1
+   REAL :: thr1mx, thr2mx, thr1, thr2
+   REAL :: dbz,dbzr,dbzs,dbzg
+   REAL :: zscoef
+   REAL, PARAMETER :: dbzmin=-20.
+   REAL, PARAMETER :: tm10c=263.15
+   REAL, PARAMETER :: pa_const=3.44e-6
+
+! RAS (added for refl_10cm computation - this is not passed in or returned)
+   REAL, DIMENSION ( ims:ime, kms:kme, jms:jme ) :: refl_10cm
+! RAS
+
+! Derived composite radar reflectivity every 5 minutes
+
+   REAL, PARAMETER :: refddt=5.
+   REAL, PARAMETER :: uvvdt =5.
+
+! Constants used in ltg threat calculations
+
+   REAL, PARAMETER    :: coef1=0.042*1000.*1.22
+   REAL, PARAMETER    :: coef2=0.20*1.22
+! McCAUL/CASE (3/8/2012) -- Change clim1 to reduce false alarms in threat1.
+!   REAL, PARAMETER    :: clim1=0.01*1.22
+   REAL, PARAMETER    :: clim1=1.50
+   REAL, PARAMETER    :: clim2=0.40*1.22
+   REAL, PARAMETER    :: clim3=0.02*1.22
+   REAL, PARAMETER    :: capa=0.28589641e0
+
+   LOGICAL :: hist_time
+
+   hist_time = .false.
+   if ( Is_alarm_tstep(grid_clock, grid_alarms(HISTORY_ALARM)) ) then
+      hist_time = .true.
+   endif
+!   print *,' hist_time = ', hist_time
+! RAS
 
 !-----------------------------------------------------------------
 ! Handle accumulations with buckets to prevent round-off truncation in long runs
@@ -325,6 +470,533 @@ CONTAINS
 
 !  !$OMP END PARALLEL DO
    ENDIF
+
+! RAS
+
+   idump = (history_interval * 60.) / dt
+   idump5min = ( 5 * 60. ) / dt
+   time_minutes = MOD(xtime,60.)
+
+!    print *,' mp_physics      = ', mp_physics
+!    print *,' WSM6SCHEME      = ', WSM6SCHEME
+!    print *,' ETAMPNEW        = ', ETAMPNEW
+!    print *,' THOMPSON        = ', THOMPSON
+!    print *,' MORR_TWO_MOMENT = ', MORR_TWO_MOMENT
+!    print *,' WDM6SCHEME      = ', WDM6SCHEME
+!    print *,' MILBRANDT2MOM   = ', MILBRANDT2MOM
+
+!   print *,' history_interval = ', history_interval
+!   print *,' itimestep        = ', itimestep
+!   print *,' idump            = ', idump
+!   print *,' time_minutes     = ', time_minutes
+!   print *,' curr_secs        = ', curr_secs
+!   print *,' xtime            = ', xtime
+
+!   IF ( MOD(curr_secs,60.*history_interval) .eq. 0. ) THEN
+   IF ( MOD((itimestep - 1), idump) .eq. 0 ) THEN
+     PRINT *, 'SRD Diagnostics: Resetting max arrays for domain with dt = ', dt
+!     PRINT *, 'SRD Diagnostics: curr_secs = ', curr_secs
+
+     i_5minavg05 = 0
+     i_5minavg10 = 0
+     i_5minavg15 = 0
+     i_5minavg20 = 0
+     i_5minavg25 = 0
+     i_5minavg30 = 0
+     i_5minavg35 = 0
+     i_5minavg40 = 0
+     i_5minavg45 = 0
+     i_5minavg50 = 0
+     i_5minavg55 = 0
+     i_5minavg60 = 0
+
+!  !$OMP PARALLEL DO   &
+!  !$OMP PRIVATE ( ij )
+     DO ij = 1 , num_tiles
+       DO j=j_start(ij),j_end(ij)
+       DO i=i_start(ij),i_end(ij)
+         wspd10max(i,j) = 0.
+         up_heli_max(i,j) = 0.
+         up_heli_max16(i,j) = 0.
+         up_heli_max01(i,j) = 0.
+         w_up_max(i,j) = 0.
+         w_dn_max(i,j) = 0.
+         w_mean(i,j) = 0.
+         grpl_max(i,j) = 0.
+         refd_max(i,j) = 0.
+         ltg1_max(i,j) = 0.
+         ltg2_max(i,j) = 0.
+         ltg3_max(i,j) = 0.
+         refdm10c_max(i,j) = 0.
+
+         refd05(i,j) = 0.
+         refd10(i,j) = 0.
+         refd15(i,j) = 0.
+         refd20(i,j) = 0.
+         refd25(i,j) = 0.
+         refd30(i,j) = 0.
+         refd35(i,j) = 0.
+         refd40(i,j) = 0.
+         refd45(i,j) = 0.
+         refd50(i,j) = 0.
+         refd55(i,j) = 0.
+         refd60(i,j) = 0.
+       ENDDO
+       ENDDO
+     ENDDO
+!  !$OMP END PARALLEL DO
+   ENDIF
+
+! RAS: Clear w_up_max every 5min to get 5-min max UVV values (11/8/13)
+!   IF ( MOD((itimestep - 1), idump5min) .eq. 0 ) THEN
+!  !$OMP PARALLEL DO   &
+!  !$OMP PRIVATE ( ij )
+!     DO ij = 1 , num_tiles
+!       DO j=j_start(ij),j_end(ij)
+!       DO i=i_start(ij),i_end(ij)
+!         w_up_max(i,j) = 0.
+!       ENDDO
+!       ENDDO
+!     ENDDO
+!  !$OMP END PARALLEL DO
+!  ENDIF
+! RAS
+
+!  !$OMP PARALLEL DO   &
+!  !$OMP PRIVATE ( ij )
+   DO ij = 1 , num_tiles
+     DO j=j_start(ij),j_end(ij)
+     DO i=i_start(ij),i_end(ij)
+
+! Zero some accounting arrays that will be used below
+
+       w_colmean(i,j) = 0.
+       numcolpts(i,j) = 0.
+       grpl_colint(i,j) = 0.
+       totice_colint(i,j) = 0.
+
+       refdm10c_calc(i,j) = 0
+       ltg1_calc(i,j) = 0
+
+       vil2(i,j) = 0
+
+! Save the total precip rate (mm s-1)
+
+       prate(i,j) = (raincv(i,j) + rainncv(i,j))/dt
+     ENDDO
+     ENDDO
+   ENDDO
+!  !$OMP END PARALLEL DO
+
+!  !$OMP PARALLEL DO   &
+!  !$OMP PRIVATE ( ij )
+   DO ij = 1 , num_tiles
+     DO j=j_start(ij),j_end(ij)
+     DO k=kms,kme
+     DO i=i_start(ij),i_end(ij)
+
+! Find vertical velocity max (up and down) below 400 mb
+
+       IF ( p8w(i,k,j) .GT. 40000. .AND. w(i,k,j) .GT. w_up_max(i,j) ) THEN
+         w_up_max(i,j) = w(i,k,j)
+       ENDIF
+
+       IF ( p8w(i,k,j) .GT. 40000. .AND. w(i,k,j) .LT. w_dn_max(i,j) ) THEN
+         w_dn_max(i,j) = w(i,k,j)
+       ENDIF
+
+! For the column mean vertical velocity calculation, first
+! total the vertical velocity between sigma levels 0.5 and 0.8
+
+       IF ( znw(k) .GE. 0.5 .AND. znw(k) .LE. 0.8 ) THEN
+         w_colmean(i,j) = w_colmean(i,j) + w(i,k,j)
+         numcolpts(i,j) = numcolpts(i,j) + 1
+       ENDIF
+
+       IF ( mp_physics .EQ. WSM6SCHEME .OR. mp_physics .EQ. THOMPSON) THEN
+         !print *,' Calculating crude reflectivity for microphysics scheme'
+
+! Calculate the derived radar reflectivity at all levels
+
+         dbzr = 0.
+         dbzs = 0.
+         dbzg = 0.
+
+         IF ( qr_curr(i,k,j) .GT. 0. ) then
+           dbzr = (( qr_curr(i,k,j) * rho(i,k,j) ) ** 1.75 )*     &
+                  3.630803e-9 * 1.e18
+         ENDIF
+
+         IF ( qs_curr(i,k,j) .GT. 0. ) then
+           dbzs = (( qs_curr(i,k,j) * rho(i,k,j) ) ** 1.75 )*     &
+                  2.18500e-10 * 1.e18
+         ENDIF
+
+         IF ( qg_curr(i,k,j) .GT. 0. ) then
+           dbzg = (( qg_curr(i,k,j) * rho(i,k,j) ) ** 1.75 )*     &
+                  1.033267e-9 * 1.e18
+         ENDIF
+
+         dbz = dbzr + dbzs + dbzg ! This is actually Z, not dBZ
+
+! This reflectivity value (Z) will be used in the calculation of 
+! vertically integrated liquid (VIL2, below) for Qin Xu
+
+!         dbz = MAX ( 0., dbz  )
+         refd3d(i,k,j) = ( MAX ( 0., dbz  ) ) ** (4/7.)
+
+! Complete the reflectivity (dBZ) calculation
+
+! These two lines need to be commented out to take advantage of the
+! reflectivity calculation provided by the various microphysics
+! schemes (Greg Thompson's code), i.e., the refl_10cm field is
+! being passed in
+
+         IF ( dbz .GT. 0. ) dbz = 10.0 * LOG10 ( dbz  )
+         refl_10cm(i,k,j) = MAX ( dbzmin, dbz )
+
+! Use this line only if the refl_10cm field is being passed in 
+! directly from the microphysics routines
+
+         !refl_10cm(i,k,j) = MAX ( dbzmin, refl_10cm(i,k,j) )
+       ENDIF
+
+!       IF ( mp_physics .EQ. ETAMPNEW ) THEN
+!         print *,' Calculating reflectivity for Ferrier scheme '
+
+! Calculate the derived radar reflectivity at all levels
+
+!         dbzr = 0.
+!         dbzs = 0.
+!         dbzg = 0.
+!
+!         IF ( qr_curr(i,k,j) .GT. 0. ) then
+!           dbzr = (( qr_curr(i,k,j) * rho(i,k,j) ) ** 1.75 )*     &
+!                  3.630803e-9 * 1.e18
+!         ENDIF
+!
+!         IF ( qs_curr(i,k,j) .GT. 0. ) then
+!           zscoef = 2.18500e-10
+!           IF ( f_rimef_phy(i,k,j) .GT. 5. ) zscoef = 1.033267e-9
+!           dbzs = (( qs_curr(i,k,j) * rho(i,k,j) ) ** 1.75 )*     &
+!                  zscoef * 1.e18
+!         ENDIF
+!
+!         IF ( qg_curr(i,k,j) .GT. 0. ) then
+!           dbzg = (( qg_curr(i,k,j) * rho(i,k,j) ) ** 1.75 )*     &
+!                  1.033267e-9 * 1.e18
+!         ENDIF
+!
+!         dbz = dbzr + dbzs + dbzg
+!
+!         IF ( dbz .GT. 0. ) dbz = 10.0 * LOG10 ( dbz  )
+!         refl_10cm(i,k,j) = MAX ( dbzmin, dbz )
+!       ENDIF
+     ENDDO
+     ENDDO
+     ENDDO
+   ENDDO
+!  !$OMP END PARALLEL DO
+
+!  !$OMP PARALLEL DO   &
+!  !$OMP PRIVATE ( ij )
+   DO ij = 1 , num_tiles
+     DO j=j_start(ij),j_end(ij)
+     DO k=kms,kme-1
+     DO i=i_start(ij),i_end(ij)
+
+! Calculate the column integrated graupel, the column
+! integrated total ice, and the max lightning threat 1
+
+       depth = ( ( ph(i,k+1,j) + phb(i,k+1,j) ) / g ) - \
+               ( ( ph(i,k  ,j) + phb(i,k  ,j) ) / g )
+       grpl_colint(i,j) = grpl_colint(i,j) + qg_curr(i,k,j) * depth * rho(i,k,j)
+
+       totice_colint(i,j) = totice_colint(i,j) + ( qi_curr(i,k,j) + \
+                            qs_curr(i,k,j) + qg_curr(i,k,j) ) * \
+                            depth * rho(i,k,j)
+
+!       IF ( k .GT. 2 .AND. ltg1_calc(i,j) .EQ. 0 ) THEN
+       IF ( ltg1_calc(i,j) .EQ. 0 ) THEN
+         tval1 = (t(i,k,j)+t0)* \
+                 ((p(i,k,j)+pb(i,k,j))*1.e-5)**capa
+         tval2 = (t(i,k+1,j)+t0)* \
+                 ((p(i,k+1,j)+pb(i,k+1,j))*1.e-5)**capa
+
+!         tval1 = (t(i,k,j)+300.)* \
+!                 ((p(i,k,j)+pb(i,k,j))*1.e-5)**capa
+!         tval2 = (t(i,k+1,j)+300.)* \
+!                 ((p(i,k+1,j)+pb(i,k+1,j))*1.e-5)**capa
+
+         IF ( ((tval1+tval2)*0.5) .LT. 258.15 ) THEN
+           ltg1_calc(i,j) = 1
+
+           ltg1(i,j) = coef1*w(i,k,j)* \
+             ((qg_curr(i,k,j)+qg_curr(i,k+1,j))*0.5)/msft(i,j)
+           IF ( ltg1(i,j) .LT. clim1 ) ltg1(i,j) = 0.
+
+           IF ( ltg1(i,j) .GT. ltg1_max(i,j) ) THEN
+             ltg1_max(i,j) = ltg1(i,j)
+           ENDIF
+         ENDIF
+       ENDIF
+
+! Calculate the vertically integrated liquid from the derived
+! reflectivity based on a formula provided by Qin Xu
+
+       vil2(i,j) = vil2(i,j) + refd3d(i,k,j) * pa_const * depth
+     ENDDO
+     ENDDO
+     ENDDO
+   ENDDO
+!  !$OMP END PARALLEL DO
+
+!  !$OMP PARALLEL DO   &
+!  !$OMP PRIVATE ( ij )
+   DO ij = 1 , num_tiles
+     DO j=j_start(ij),j_end(ij)
+     DO i=i_start(ij),i_end(ij)
+
+! Finish the calculation of vertically integrated liquid
+
+!       vil2(i,j) = 3.44 * vil2(i,j) * 1.0e-6
+
+! Calculate the max 10 m wind speed between output times
+
+       wind_vel = sqrt ( u10(i,j)*u10(i,j) + v10(i,j)*v10(i,j) )
+       IF ( wind_vel .GT. wspd10max(i,j) ) THEN
+         wspd10max(i,j) = wind_vel
+       ENDIF
+
+! Calculate the column mean vertical velocity between output times
+
+       w_mean(i,j) = w_mean(i,j) + w_colmean(i,j) / numcolpts(i,j)
+
+       IF ( MOD(itimestep, idump) .eq. 0 ) THEN
+         w_mean(i,j) = w_mean(i,j) / idump
+       ENDIF
+
+! Calculate the max column integrated graupel between output times
+
+       IF ( grpl_colint(i,j) .gt. grpl_max(i,j) ) THEN
+          grpl_max(i,j) = grpl_colint(i,j)
+       ENDIF
+
+! Calculate the max lightning threat 2
+
+       ltg2(i,j) = coef2 * totice_colint(i,j) / msft(i,j)
+       IF ( ltg2(i,j) .LT. clim2 ) ltg2(i,j) = 0.
+
+       IF ( ltg2(i,j) .GT. ltg2_max(i,j) ) THEN
+          ltg2_max(i,j) = ltg2(i,j)
+       ENDIF
+
+! Derived radar reflectivity between output times
+
+! Use k=kms for now, but can be reset to whatever level seems best
+
+       IF ( .NOT. hist_time .AND. refl_10cm(i,kms,j) .GT. refd_max(i,j) ) THEN
+         refd_max(i,j) = refl_10cm(i,kms,j)
+       ENDIF
+     ENDDO
+     ENDDO
+   ENDDO
+!  !$OMP END PARALLEL DO
+
+! Calculate the derived radar reflectivity at the -10 deg C
+! level between output times -- used in CI algorithm
+
+!  !$OMP PARALLEL DO   &
+!  !$OMP PRIVATE ( ij )
+   DO ij = 1 , num_tiles
+     DO j=j_start(ij),j_end(ij)
+     DO k=kme-1,kms+1,-1
+     DO i=i_start(ij),i_end(ij)
+       tval1 = ( t(i,k,j) + t0 ) *  &
+               (( p(i,k,j) + pb(i,k,j) ) * 1.e-5 ) ** capa
+       tval2 = ( t(i,k-1,j) + t0 ) *  &
+               (( p(i,k-1,j) + pb(i,k-1,j) ) * 1.e-5 ) ** capa
+
+!       if ( j.eq.j_start(ij) .and. i.eq.i_start(ij) )then
+!         print *,' k, tval1, tval2 = ', k,tval1,tval2,refdm10c_calc(i,j)
+!       endif
+
+       IF ( tval1 .LE. tm10c .AND. tval2 .GE. tm10c .AND. refdm10c_calc(i,j) .EQ. 0 ) THEN
+         refdm10c_calc(i,j) = 1
+
+         afrac = ( tm10c - tval2 ) / ( tval1 - tval2 )
+
+! Derived radar reflectivity between output times
+
+         refdm10c(i,j) = refl_10cm(i,k-1,j) + afrac * ( refl_10cm(i,k,j) - refl_10cm(i,k-1,j) )
+
+         IF ( refdm10c(i,j) .GT. refdm10c_max(i,j) ) THEN
+           refdm10c_max(i,j) = refdm10c(i,j)
+         ENDIF
+       ENDIF
+     ENDDO
+     ENDDO
+     ENDDO
+   ENDDO
+!  !$OMP END PARALLEL DO
+
+! Calculate the max lightning threat 3 -- max values for
+! lightning threats 1 and 2 must be determined first
+
+! Make the calculation for the instantaneous lightning
+! threat fields as well
+
+!  !$OMP PARALLEL DO   &
+!  !$OMP PRIVATE ( ij )
+   thr1mx = 0.
+   thr2mx = 0.
+   thr1   = 0.
+   thr2   = 0.
+   DO ij = 1 , num_tiles
+     DO j=j_start(ij),j_end(ij)
+     DO i=i_start(ij),i_end(ij)
+       IF ( ltg1_max(i,j) .GT. thr1mx ) THEN
+         thr1mx = ltg1_max(i,j)
+         ithr1mx = i
+         jthr1mx = j
+       ENDIF
+
+       IF ( ltg2_max(i,j) .GT. thr2mx ) THEN
+         thr2mx = ltg2_max(i,j)
+         ithr2mx = i
+         jthr2mx = j
+       ENDIF
+
+       IF ( ltg1(i,j) .GT. thr1 ) THEN
+         thr1 = ltg1(i,j)
+         ithr1 = i
+         jthr1 = j
+       ENDIF
+
+       IF ( ltg2(i,j) .GT. thr2 ) THEN
+         thr2 = ltg2(i,j)
+         ithr2 = i
+         jthr2 = j
+       ENDIF
+     ENDDO
+     ENDDO
+   ENDDO
+!  !$OMP END PARALLEL DO
+
+! Compute global MAX
+
+   CALL wrf_dm_maxval ( thr1mx, ithr1mx, jthr1mx )
+   CALL wrf_dm_maxval ( thr2mx, ithr2mx, jthr2mx )
+   CALL wrf_dm_maxval ( thr1,   ithr1,   jthr1   )
+   CALL wrf_dm_maxval ( thr2,   ithr2,   jthr2   )
+
+! Now calculate the max and instantaneous lightning threat 3
+
+!  !$OMP PARALLEL DO   &
+!  !$OMP PRIVATE ( ij )
+   DO ij = 1 , num_tiles
+     DO j=j_start(ij),j_end(ij)
+     DO i=i_start(ij),i_end(ij)
+!       IF ( thr1mx .GT. 0. ) THEN
+!         ltg3_max(i,j) = 0.95 * ltg1_max(i,j) * ( thr2mx / thr1mx ) + &
+!                         0.05 * ltg2_max(i,j)
+!       ELSE
+!         ltg3_max(i,j) = 0.05 * ltg2_max(i,j)
+!       ENDIF
+
+       IF ( thr2mx .GT. 0. ) THEN
+         ltg3_max(i,j) = 0.95 * ltg1_max(i,j) + &
+                         0.05 * ltg2_max(i,j) * ( thr1mx / thr2mx )
+       ELSE
+         ltg3_max(i,j) = 0.95 * ltg1_max(i,j)
+       ENDIF
+
+       IF ( ltg3_max(i,j) .LT. clim3 ) ltg3_max(i,j) = 0.
+
+!       IF ( thr1 .GT. 0. ) THEN
+!         ltg3(i,j) = 0.95 * ltg1(i,j) * ( thr2 / thr1 ) + &
+!                     0.05 * ltg2(i,j)
+!       ELSE
+!         ltg3(i,j) = 0.05 * ltg2(i,j)
+!       ENDIF
+
+       IF ( thr2 .GT. 0. ) THEN
+         ltg3(i,j) = 0.95 * ltg1(i,j) + &
+                     0.05 * ltg2(i,j) * ( thr1 / thr2 )
+       ELSE
+         ltg3(i,j) = 0.95 * ltg1(i,j)
+       ENDIF
+
+       IF ( ltg3(i,j) .LT. clim3 ) ltg3(i,j) = 0.
+     ENDDO
+     ENDDO
+   ENDDO
+!  !$OMP END PARALLEL DO
+
+!  !$OMP PARALLEL DO   &
+!  !$OMP PRIVATE ( ij )
+   DO ij = 1 , num_tiles
+     DO j=j_start(ij),j_end(ij)
+     DO k=kms,kme
+     DO i=i_start(ij),i_end(ij)
+
+! Derived composite radar reflectivity at 5-minute intervals
+
+       IF ( NINT( time_minutes + dt / 60. ) .EQ. 5 .AND.            &
+         ( CURR_SECS + dt .GE. ( INT( CURR_SECS / ( refddt * 60 ) + 1 ) * refddt * 60 ) ) .AND. &
+         refl_10cm(i,k,j) .GE. refd05(i,j) ) THEN
+           refd05(i,j) = refl_10cm(i,k,j)
+       ELSEIF ( NINT( time_minutes + dt / 60. ) .EQ. 10 .AND.       &
+         ( CURR_SECS + dt .GE. ( INT( CURR_SECS / ( refddt * 60 ) + 1 ) * refddt * 60 ) ) .AND. &
+         refl_10cm(i,k,j) .GE. refd10(i,j) ) THEN
+           refd10(i,j) = refl_10cm(i,k,j)
+       ELSEIF ( NINT( time_minutes + dt / 60. ) .EQ. 15 .AND.       &
+         ( CURR_SECS + dt .GE. ( INT( CURR_SECS / ( refddt * 60 ) + 1 ) * refddt * 60 ) ) .AND. &
+         refl_10cm(i,k,j) .GE. refd15(i,j) ) THEN
+           refd15(i,j) = refl_10cm(i,k,j)
+       ELSEIF ( NINT( time_minutes + dt / 60. ) .EQ. 20 .AND.       &
+         ( CURR_SECS + dt .GE. ( INT( CURR_SECS / ( refddt * 60 ) + 1 ) * refddt * 60 ) ) .AND. &
+         refl_10cm(i,k,j) .GE. refd20(i,j) ) THEN
+           refd20(i,j) = refl_10cm(i,k,j)
+       ELSEIF ( NINT( time_minutes + dt / 60. ) .EQ. 25 .AND.       &
+         ( CURR_SECS + dt .GE. ( INT( CURR_SECS / ( refddt * 60 ) + 1 ) * refddt * 60 ) ) .AND. &
+         refl_10cm(i,k,j) .GE. refd25(i,j) ) THEN
+           refd25(i,j) = refl_10cm(i,k,j)
+       ELSEIF ( NINT( time_minutes + dt / 60. ) .EQ. 30 .AND.       &
+         ( CURR_SECS + dt .GE. ( INT( CURR_SECS / ( refddt * 60 ) + 1 ) * refddt * 60 ) ) .AND. &
+         refl_10cm(i,k,j) .GE. refd30(i,j) ) THEN
+           refd30(i,j) = refl_10cm(i,k,j)
+       ELSEIF ( NINT( time_minutes + dt / 60. ) .EQ. 35 .AND.       &
+         ( CURR_SECS + dt .GE. ( INT( CURR_SECS / ( refddt * 60 ) + 1 ) * refddt * 60 ) ) .AND. &
+         refl_10cm(i,k,j) .GE. refd35(i,j) ) THEN
+           refd35(i,j) = refl_10cm(i,k,j)
+       ELSEIF ( NINT( time_minutes + dt / 60. ) .EQ. 40 .AND.       &
+         ( CURR_SECS + dt .GE. ( INT( CURR_SECS / ( refddt * 60 ) + 1 ) * refddt * 60 ) ) .AND. &
+         refl_10cm(i,k,j) .GE. refd40(i,j) ) THEN
+           refd40(i,j) = refl_10cm(i,k,j)
+       ELSEIF ( NINT( time_minutes + dt / 60. ) .EQ. 45 .AND.       &
+         ( CURR_SECS + dt .GE. ( INT( CURR_SECS / ( refddt * 60 ) + 1 ) * refddt * 60 ) ) .AND. &
+         refl_10cm(i,k,j) .GE. refd45(i,j) ) THEN
+           refd45(i,j) = refl_10cm(i,k,j)
+       ELSEIF ( NINT( time_minutes + dt / 60. ) .EQ. 50 .AND.       &
+         ( CURR_SECS + dt .GE. ( INT( CURR_SECS / ( refddt * 60 ) + 1 ) * refddt * 60 ) ) .AND. &
+         refl_10cm(i,k,j) .GE. refd50(i,j) ) THEN
+           refd50(i,j) = refl_10cm(i,k,j)
+       ELSEIF ( NINT( time_minutes + dt / 60. ) .EQ. 55 .AND.       &
+         ( CURR_SECS + dt .GE. ( INT( CURR_SECS / ( refddt * 60 ) + 1 ) * refddt * 60 ) ) .AND. &
+         refl_10cm(i,k,j) .GE. refd55(i,j) ) THEN
+           refd55(i,j) = refl_10cm(i,k,j)
+       ELSEIF ( NINT( time_minutes + dt / 60. ) .EQ. 60 .AND.       &
+         ( CURR_SECS + dt .GE. ( INT( CURR_SECS / ( refddt * 60 ) + 1 ) * refddt * 60 ) ) .AND. &
+         refl_10cm(i,k,j) .GE. refd60(i,j) ) THEN
+           refd60(i,j) = refl_10cm(i,k,j)
+       ENDIF
+     ENDDO
+     ENDDO
+     ENDDO
+   ENDDO
+
+! RAS (without SRD comments)
 
    if (diag_print .eq. 0 ) return
 

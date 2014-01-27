@@ -40,17 +40,21 @@ CONTAINS
 #ifdef DM_PARALLEL
     USE module_dm, ONLY : local_communicator, mytask, ntasks, ntasks_x, ntasks_y, local_communicator_periodic, &
                           wrf_dm_maxval, wrf_err_message, local_communicator_x, local_communicator_y
-    USE module_comm_dm, ONLY : halo_em_tke_c_sub,halo_em_tke_d_sub,halo_em_tke_e_sub            &
+! RAS (added halo_em_helicity_sub)
+    USE module_comm_dm, ONLY : halo_em_tke_c_sub,halo_em_tke_d_sub,halo_em_tke_e_sub,halo_em_helicity_sub      &
             ,halo_em_phys_pbl_sub,halo_em_phys_shcu_sub &
             ,halo_em_fdda_sub,halo_em_phys_diffusion_sub,halo_em_tke_3_sub &
             ,halo_em_tke_5_sub,halo_obs_nudge_sub,period_bdy_em_a1_sub,period_bdy_em_phy_bc_sub &
             ,period_bdy_em_fdda_bc_sub,period_bdy_em_chem_sub,halo_em_phys_cu_sub
+! RAS
 #endif
 
     USE module_driver_constants
-    USE module_diffusion_em, ONLY : phy_bc, cal_deform_and_div, compute_diff_metrics, &
+! RAS (added cal_helicity)
+    USE module_diffusion_em, ONLY : phy_bc, cal_deform_and_div, cal_helicity, compute_diff_metrics, &
                                     vertical_diffusion_2, horizontal_diffusion_2, calculate_km_kh, &
                                     tke_rhs
+! RAS
     USE module_em, ONLY : calculate_phy_tend
     USE module_fddaobs_driver, ONLY : fddaobs_driver
     USE module_bc, ONLY : set_physical_bc3d, set_physical_bc2d
@@ -454,6 +458,46 @@ BENCH_START(deform_div_tim)
          ENDDO
          !$OMP END PARALLEL DO
 BENCH_END(deform_div_tim)
+
+! RAS
+
+! Updraft helicity between output times
+
+#ifdef DM_PARALLEL
+#     include "HALO_EM_HELICITY.inc"
+#endif
+
+BENCH_START(helicity_tim)
+
+       !$OMP PARALLEL DO   &
+       !$OMP PRIVATE ( ij )
+
+       DO ij = 1 , grid%num_tiles
+
+          CALL wrf_debug ( 200 , ' call cal_helicity' )
+          CALL cal_helicity ( config_flags,grid%u_2,grid%v_2,grid%w_2,  &
+                              grid%uh,                             &
+                              grid%up_heli_max,                    &
+                              grid%uh16,                           &
+                              grid%up_heli_max16,                  &
+                              grid%uh01,                           &
+                              grid%up_heli_max01,                  &
+                              grid%ph_2,grid%phb,                  &
+                              grid%msfux,grid%msfuy,               &
+                              grid%msfvx,grid%msfvy,               &
+                              grid%ht,                             &
+                              grid%rdx, grid%rdy, grid%dn, grid%dnw, grid%rdz, grid%rdzw,   &
+                              grid%fnm,grid%fnp,grid%cf1,grid%cf2,grid%cf3,grid%zx,grid%zy, &
+                              ids, ide, jds, jde, kds, kde,        &
+                              ims, ime, jms, jme, kms, kme,        &
+                              grid%i_start(ij), grid%i_end(ij),    &
+                              grid%j_start(ij), grid%j_end(ij),    &
+                              k_start    , k_end                  )
+       ENDDO
+       !$OMP END PARALLEL DO
+BENCH_END(helicity_tim)
+
+! RAS
 
 #ifdef DM_PARALLEL
 #     include "HALO_EM_TKE_D.inc"

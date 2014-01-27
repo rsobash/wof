@@ -3924,6 +3924,48 @@ BENCH_END(bc_2d_tim)
       &             ,PREC_ACC_NC=grid%prec_acc_nc                          &
       &             ,PREC_ACC_DT=config_flags%prec_acc_dt                  &
       &             ,CURR_SECS=curr_secs                                   &
+! RAS
+      &             ,MP_PHYSICS=config_flags%mp_physics                    &
+      &             ,HISTORY_INTERVAL=grid%history_interval                &
+      &             ,ITIMESTEP=grid%itimestep                              &
+      &             ,T=grid%t_2,U10=grid%u10,V10=grid%v10,W=grid%w_2       &
+      &             ,U_PHY=u_phy,V_PHY=v_phy                               &
+      &             ,P=grid%p,PB=grid%pb                                   &
+      &             ,WSPD10MAX=grid%wspd10max                              &
+      &             ,UP_HELI_MAX=grid%up_heli_max                          &
+      &             ,UP_HELI_MAX16=grid%up_heli_max16                      &
+      &             ,UP_HELI_MAX01=grid%up_heli_max01                      &
+      &             ,W_UP_MAX=grid%w_up_max,W_DN_MAX=grid%w_dn_max         &
+      &             ,ZNW=grid%znw,W_COLMEAN=w_colmean                      &
+      &             ,NUMCOLPTS=numcolpts,W_MEAN=grid%w_mean                &
+      &             ,GRPL_MAX=grid%grpl_max,GRPL_COLINT=grpl_colint        &
+      &             ,REFD_MAX=grid%refd_max                                &
+      &             ,REFD05=grid%refd05,REFD10=grid%refd10                 &
+      &             ,REFD15=grid%refd15,REFD20=grid%refd20                 &
+      &             ,REFD25=grid%refd25,REFD30=grid%refd30                 &
+      &             ,REFD35=grid%refd35,REFD40=grid%refd40                 &
+      &             ,REFD45=grid%refd45,REFD50=grid%refd50                 &
+      &             ,REFD55=grid%refd55,REFD60=grid%refd60                 &
+      &             ,REFDM10C=grid%refdm10c                                &
+      &             ,REFDM10C_CALC=refdm10c_calc                           &
+      &             ,REFDM10C_MAX=grid%refdm10c_max                        &
+      &             ,LTG1_MAX=grid%ltg1_max,LTG2_MAX=grid%ltg2_max         &
+      &             ,LTG3_MAX=grid%ltg3_max                                &
+      &             ,LTG1=grid%ltg1,LTG2=grid%ltg2,LTG3=grid%ltg3          &
+      &             ,LTG1_CALC=ltg1_calc                                   &
+      &             ,TOTICE_COLINT=totice_colint,MSFT=grid%msft            &
+      &             ,QR_CURR=moist(ims,kms,jms,P_QR)                       &
+      &             ,QS_CURR=moist(ims,kms,jms,P_QS)                       &
+      &             ,QI_CURR=moist(ims,kms,jms,P_QI)                       &
+      &             ,QG_CURR=moist(ims,kms,jms,P_QG)                       &
+      &             ,F_RIMEF_PHY=grid%f_rimef_phy                          &
+      &             ,RHO=rho,PH=grid%ph_2,PHB=grid%phb,HT=grid%ht          &
+      &             ,DZ8W=dz8w                                             &
+      &             ,PRATE=grid%prate                                      &
+      &             ,REFD3D=grid%refd3d,VIL2=grid%vil2                     &
+!      &             ,REFL_10CM=grid%refl_10cm                              &
+      &             ,GRID_CLOCK=grid%domain_clock,GRID_ALARMS=grid%alarms  & !-- Uli Blahak (01 Dec 2006)
+! RAS
                   ! Dimension arguments
       &             ,IDS=ids,IDE=ide, JDS=jds,JDE=jde, KDS=kds,KDE=kde     &
       &             ,IMS=ims,IME=ime, JMS=jms,JME=jme, KMS=kms,KME=kme     &
