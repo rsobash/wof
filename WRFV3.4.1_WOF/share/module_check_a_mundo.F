@@ -455,8 +455,9 @@
            model_config_rec % num_soil_layers = 4
       IF ( model_config_rec % sf_surface_physics(1) .EQ. NOAHMPSCHEME   ) &
            model_config_rec % num_soil_layers = 4
-      IF ( model_config_rec % sf_surface_physics(1) .EQ. RUCLSMSCHEME) &
-           model_config_rec % num_soil_layers = 6
+!      tgs 11 oct 12 - let the namelist value decide how many levels in RUC LSM
+!      IF ( model_config_rec % sf_surface_physics(1) .EQ. RUCLSMSCHEME) &
+!           model_config_rec % num_soil_layers = 6
       IF ( model_config_rec % sf_surface_physics(1) .EQ. PXLSMSCHEME ) &
            model_config_rec % num_soil_layers = 2
       IF ( model_config_rec % sf_surface_physics(1) .EQ. 88          ) &

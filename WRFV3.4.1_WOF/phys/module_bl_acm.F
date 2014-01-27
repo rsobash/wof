@@ -353,7 +353,7 @@ CONTAINS
        ENDDO  
        TH1 = TH1/KSRC
        IF(MOL(I).LT.0.0 .AND. XTIME.GT.1) then
-         WSS   = (UST(I) ** 3 + 0.6 * WST(I) ** 3) ** 0.33333
+         WSS   = ABS((UST(I) ** 3 + 0.6 * WST(I) ** 3)) ** 0.33333
          TCONV = -8.5 * UST(I) * TSTV(I) / WSS
          TH1   = TH1 + TCONV
        ENDIF

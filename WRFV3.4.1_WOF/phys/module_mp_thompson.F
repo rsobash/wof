@@ -40,6 +40,9 @@
       USE module_domain, ONLY : HISTORY_ALARM, Is_alarm_tstep
 
       IMPLICIT NONE
+! DCD 5/31/11
+      CHARACTER*8, PARAMETER :: Thompson_scheme_version = '3.3'
+
 
       LOGICAL, PARAMETER, PRIVATE:: iiwarm = .false.
       INTEGER, PARAMETER, PRIVATE:: IFDRY = 0
@@ -82,7 +85,8 @@
 !.. y-intercept for an exponential distrib and proper values are
 !.. computed based on same mixing ratio and total number concentration.
       REAL, PARAMETER, PRIVATE:: gonv_min = 1.E4
-      REAL, PARAMETER, PRIVATE:: gonv_max = 3.E6
+!      REAL, PARAMETER, PRIVATE:: gonv_max = 3.E6
+      REAL, PARAMETER, PRIVATE:: gonv_max = 1.E6 ! value used with WoF WRFV321
 
 !..Mass power law relations:  mass = am*D**bm
 !.. Snow from Field et al. (2005), others assume spherical form.
@@ -103,7 +107,7 @@
       REAL, PARAMETER, PRIVATE:: fv_r = 195.0
       REAL, PARAMETER, PRIVATE:: av_s = 40.0
       REAL, PARAMETER, PRIVATE:: bv_s = 0.55
-      REAL, PARAMETER, PRIVATE:: fv_s = 100.0
+      REAL, PARAMETER, PRIVATE:: fv_s = 125.0 ! WoF change from 100.
       REAL, PARAMETER, PRIVATE:: av_g = 442.0
       REAL, PARAMETER, PRIVATE:: bv_g = 0.89
       REAL, PARAMETER, PRIVATE:: av_i = 1847.5
@@ -127,8 +131,10 @@
 !.. problems with Paul Field's moments and should not be set larger
 !.. because of truncation problems in snow/ice growth.
       REAL, PARAMETER, PRIVATE:: R1 = 1.E-12
-      REAL, PARAMETER, PRIVATE:: R2 = 1.E-6
-      REAL, PARAMETER, PRIVATE:: eps = 1.E-15
+!      REAL, PARAMETER, PRIVATE:: R2 = 1.E-6
+      REAL, PARAMETER, PRIVATE:: R2 = 1.E-8  ! WoF WRF 3.4.1
+!      REAL, PARAMETER, PRIVATE:: eps = 1.E-15
+      REAL, PARAMETER, PRIVATE:: eps = 1.E-29 ! WoF WRF 3.2.1
 
 !..Constants in Cooper curve relation for cloud ice number.
       REAL, PARAMETER, PRIVATE:: TNO = 5.0
@@ -989,7 +995,8 @@
           call calc_refl10cm (qv1d, qc1d, qr1d, nr1d, qs1d, qg1d,       &
                       t1d, p1d, dBZ, kts, kte, i, j)
           do k = kts, kte
-             refl_10cm(i,k,j) = MAX(-35., dBZ(k))
+!             refl_10cm(i,k,j) = MAX(-35., dBZ(k))
+             refl_10cm(i,k,j) = MAX(0., dBZ(k))
           enddo
          endif
          ENDIF

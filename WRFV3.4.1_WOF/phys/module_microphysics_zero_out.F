@@ -111,7 +111,8 @@ SUBROUTINE microphysics_zero_outb (                                      &
          IF ( ( j .GE. jts ) .AND. ( j .LE. MIN( jte , jde-1) ) ) THEN
             DO k = kts, kte
             DO i = its , MIN ( ite , ide-1 )
-               moist_new(i,k,j,n) = MAX ( moist_new(i,k,j,n) , 0. )
+!               moist_new(i,k,j,n) = MAX ( moist_new(i,k,j,n) , 0. )
+               IF ( moist_new(i,k,j,n) .LT. config_flags%mp_zero_out_thresh )  moist_new(i,k,j,n) =0.
             ENDDO
             ENDDO
          END IF
@@ -120,7 +121,8 @@ SUBROUTINE microphysics_zero_outb (                                      &
          IF ( ( j .GE. jts ) .AND. ( j .LE. MIN( jte , jde-1) ) ) THEN
             DO k = kts, kte
             DO i = its , MIN ( ite , ide-1 )
-               moist_new(i,k,j,n) = MAX ( moist_new(i,k,j,n) , 0. )
+!               moist_new(i,k,j,n) = MAX ( moist_new(i,k,j,n) , 0. )
+               IF ( moist_new(i,k,j,n) .LT. config_flags%mp_zero_out_thresh )  moist_new(i,k,j,n) =0.
             ENDDO
             ENDDO
          END IF
@@ -129,7 +131,8 @@ SUBROUTINE microphysics_zero_outb (                                      &
          IF ( ( i .GE. its ) .AND. ( i .LE. MIN( ite , ide-1) ) ) THEN
             DO j = jts , MIN ( jte , jde-1 )
             DO k = kts, kte
-               moist_new(i,k,j,n) = MAX ( moist_new(i,k,j,n) , 0. )
+!               moist_new(i,k,j,n) = MAX ( moist_new(i,k,j,n) , 0. )
+               IF ( moist_new(i,k,j,n) .LT. config_flags%mp_zero_out_thresh )  moist_new(i,k,j,n) =0.
             ENDDO
             ENDDO
          END IF
@@ -138,7 +141,8 @@ SUBROUTINE microphysics_zero_outb (                                      &
          IF ( ( i .GE. its ) .AND. ( i .LE. MIN( ite , ide-1) ) ) THEN
             DO j = jts , MIN ( jte , jde-1 )
             DO k = kts, kte
-               moist_new(i,k,j,n) = MAX ( moist_new(i,k,j,n) , 0. )
+!               moist_new(i,k,j,n) = MAX ( moist_new(i,k,j,n) , 0. )
+               IF ( moist_new(i,k,j,n) .LT. config_flags%mp_zero_out_thresh )  moist_new(i,k,j,n) =0.
             ENDDO
             ENDDO
          END IF

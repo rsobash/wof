@@ -73,6 +73,9 @@ SUBROUTINE solve_em ( grid , config_flags  &
 
    IMPLICIT NONE
 
+#ifdef DM_PARALLEL
+   include 'mpif.h'
+#endif
    !  Input data.
 
    TYPE(domain) , TARGET          :: grid
@@ -170,6 +173,9 @@ SUBROUTINE solve_em ( grid , config_flags  &
    INTEGER, PARAMETER                         :: precision = 100
    INTEGER                                    :: num, den
    TYPE(WRFU_TimeInterval)                    :: dtInterval, intervaltime,restartinterval
+
+   real*8  dt1, dt2  ! for mpi timing
+   integer mpi_error_code
 
 ! Define benchmarking timers if -DBENCH is compiled
 #include <bench_solve_em_def.h>
@@ -691,6 +697,7 @@ BENCH_END(set_phys_bc_tim)
 #        include "HALO_EM_SCALAR_E_5.inc"
        ENDIF
 #endif
+
 
        CALL first_rk_step_part2 (    grid, config_flags         &
                              , moist , moist_tend               &
@@ -3208,6 +3215,13 @@ BENCH_START(micro_driver_tim)
 !     WRITE(wrf_err_message,*)'diag_flag=',diag_flag
 !     CALL wrf_debug ( 0 , wrf_err_message )
 
+#ifdef DM_PARALLEL
+         CALL MPI_Barrier(local_communicator, mpi_error_code)
+
+         dt1 = MPI_Wtime()
+#endif
+
+
      CALL microphysics_driver(                                            &
       &         DT=dtm             ,DX=grid%dx              ,DY=grid%dy   &
       &        ,DZ8W=dz8w          ,F_ICE_PHY=grid%f_ice_phy              &
@@ -3216,6 +3230,8 @@ BENCH_START(micro_driver_tim)
       &        ,RHO=rho            ,SPEC_ZONE=grid%spec_zone              &
       &        ,SR=grid%sr              ,TH=th_phy                        &
       &        ,refl_10cm=grid%refl_10cm                                  & ! hm, 9/22/09 for refl
+      &        ,COMPOSITE_REFL_10CM=grid%composite_refl_10cm              &
+      &        ,VT_DBZ_WT=grid%vt_dbz_wt                                  &
       &        ,WARM_RAIN=grid%warm_rain                                  &
       &        ,T8W=t8w                                                   &
       &        ,CLDFRA=grid%cldfra, EXCH_H=grid%exch_h &
@@ -3242,6 +3258,8 @@ BENCH_START(micro_driver_tim)
       &        ,NUM_TILES=grid%num_tiles                                  &
       &        ,NAER=grid%naer                                            &
                  ! Optional
+      &        , rscghis_3d=grid%rscghis_3d                                &
+      &        , rscghis_2d=grid%rscghis_2d                                &
       &        , RAINNC=grid%rainnc, RAINNCV=grid%rainncv                 &
       &        , SNOWNC=grid%snownc, SNOWNCV=grid%snowncv                 &
       &        , GRAUPELNC=grid%graupelnc, GRAUPELNCV=grid%graupelncv     & ! for milbrandt2mom
@@ -3271,12 +3289,16 @@ BENCH_START(micro_driver_tim)
       &        , QNS_CURR=scalar(ims,kms,jms,P_QNS), F_QNS=F_QNS          &
       &        , QNG_CURR=scalar(ims,kms,jms,P_QNG), F_QNG=F_QNG          &
       &        , QNH_CURR=scalar(ims,kms,jms,P_QNH), F_QNH=F_QNH          & ! for milbrandt2mom and nssl_2mom
-!       &        , QZR_CURR=scalar(ims,kms,jms,P_QZR), F_QZR=F_QZR          & ! for milbrandt3mom
+      &        , QSW_CURR=scalar(ims,kms,jms,P_QSW), F_QSW=F_QSW          & ! nssl_2mom
+      &        , QGW_CURR=scalar(ims,kms,jms,P_QGW), F_QGW=F_QGW          & ! nssl_2mom
+      &        , QHW_CURR=scalar(ims,kms,jms,P_QHW), F_QHW=F_QHW          & ! nssl_2mom
+       &        , QZR_CURR=scalar(ims,kms,jms,P_QZR), F_QZR=F_QZR          & ! for milbrandt3mom
 !       &        , QZI_CURR=scalar(ims,kms,jms,P_QZI), F_QZI=F_QZI          & ! "
 !       &        , QZS_CURR=scalar(ims,kms,jms,P_QZS), F_QZS=F_QZS          & ! "
-!       &        , QZG_CURR=scalar(ims,kms,jms,P_QZG), F_QZG=F_QZG          & ! "
-!       &        , QZH_CURR=scalar(ims,kms,jms,P_QZH), F_QZH=F_QZH          & ! "
-      &        , QVOLG_CURR=scalar(ims,kms,jms,P_QVOLG), F_QVOLG=F_QVOLG      & ! for nssl_2mom
+      &        , QZG_CURR=scalar(ims,kms,jms,P_QZG), F_QZG=F_QZG          & ! "
+      &        , QZH_CURR=scalar(ims,kms,jms,P_QZH), F_QZH=F_QZH          & ! "
+      &        , QVOLG_CURR=scalar(ims,kms,jms,P_QVOLG), F_QVOLG=F_QVOLG  & ! for nssl_2mom
+      &        , QVOLH_CURR=scalar(ims,kms,jms,P_QVOLH), F_QVOLH=F_QVOLH  & ! for nssl_2mom
       &        , qrcuten=grid%rqrcuten, qscuten=grid%rqscuten             &
       &        , qicuten=grid%rqicuten,mu=grid%mut                        &
       &        , HAIL=config_flags%gsfcgce_hail                           & ! for gsfcgce
@@ -3288,6 +3310,18 @@ BENCH_START(micro_driver_tim)
       &        , diagflag=diag_flag, do_radar_ref=config_flags%do_radar_ref &
                                                                           )
 BENCH_END(micro_driver_tim)
+
+#ifdef DM_PARALLEL
+         CALL MPI_Barrier(local_communicator, mpi_error_code)
+         dt2 = MPI_Wtime()
+
+         IF (mytask .eq. 0) THEN
+            WRITE(0,*) ' time for microphysics = ', dT2 - dT1
+         ENDIF
+#endif
+
+
+
 
 #if 0
 BENCH_START(microswap_2)
@@ -3821,6 +3855,34 @@ BENCH_END(bc_2d_tim)
 
    END DO
    !$OMP END PARALLEL DO
+
+
+!      DCD 4/28/11
+!      Compute reflectivity and fall speed consistent with Thompson scheme, if appropriate.
+       IF ( (config_flags%mp_physics .eq. THOMPSON) .and. (curr_secs .gt. 0 ) .and.             &
+            (ASSOCIATED(grid%refl_10cm)) .and. (ASSOCIATED(grid%composite_refl_10cm)) .and.     &
+            (ASSOCIATED(grid%vt_dbz_wt)) .and. diag_flag ) THEN
+
+         print*, 'Computing refl_10cm with radar_diagnostic_calc.'
+         CALL radar_diagnostic_calc(                                          &
+      &                 REFL_10CM=grid%refl_10cm                              &
+      &                ,COMPOSITE_REFL_10CM=grid%composite_refl_10cm          &
+      &                ,VT_DBZ_WT=grid%vt_dbz_wt                              &
+      &                ,MP_PHYSICS=config_flags%mp_physics                    &
+      &                ,QC_CURR=moist(ims,kms,jms,P_QC)                       &
+      &                ,QNR_CURR=scalar(ims,kms,jms,P_QNR)                    &
+      &                ,QR_CURR=moist(ims,kms,jms,P_QR)                       &
+      &                ,QS_CURR=moist(ims,kms,jms,P_QS)                       &
+      &                ,QG_CURR=moist(ims,kms,jms,P_QG)                       &
+      &                ,RHO_CURR=rho                                          &
+      &                ,T=grid%t_phy                                               &
+      &                ,IMS=ims,IME=ime, JMS=jms,JME=jme, KMS=kms,KME=kme     &
+      &                ,I_START=grid%i_start,I_END=min(grid%i_end, ide-1)     &
+      &                ,J_START=grid%j_start,J_END=min(grid%j_end, jde-1)     &
+      &                ,NUM_TILES=grid%num_tiles                              &
+      &                                                          )
+       ENDIF
+!      DCD
 
 ! calculate some model diagnostics.
 

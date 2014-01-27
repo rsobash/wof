@@ -26,17 +26,20 @@ SUBROUTINE microphysics_driver(                                          &
                       ,qndrop_curr,qni_curr,qh_curr,qnh_curr             &
                       ,qzr_curr,qzi_curr,qzs_curr,qzg_curr,qzh_curr      &
                       ,qns_curr,qnr_curr,qng_curr,qnn_curr,qnc_curr      &
-                      ,qvolg_curr                                        &
+                      ,qvolg_curr,qvolh_curr                             &
+                      ,qsw_curr,qgw_curr,qhw_curr                        &
                       ,f_qv,f_qc,f_qr,f_qi,f_qs,f_qg,f_qndrop,f_qni      &
                       ,f_qns,f_qnr,f_qng,f_qnc,f_qnn,f_qh,f_qnh          &
                       ,            f_qzr,f_qzi,f_qzs,f_qzg,f_qzh         &
-                      ,f_qvolg                                           &
+                      ,f_qvolg,f_qvolh,f_qsw,f_qgw,f_qhw                 &
                       ,qrcuten, qscuten, qicuten, mu                     &
                       ,qt_curr,f_qt                                      &
                       ,mp_restart_state,tbpvs_state,tbpvs0_state         & ! for etampnew or etampold
                       ,hail,ice2                                         & ! for mp_gsfcgce
 !                     ,ccntype                                           & ! for mp_milbrandt2mom
                       ,w ,z                                              &
+                      ,rscghis_3d                                        &
+                      ,rscghis_2d                                        &
                       ,rainnc,    rainncv                                &
                       ,snownc,    snowncv                                &
                       ,hailnc,    hailncv                                &
@@ -45,7 +48,7 @@ SUBROUTINE microphysics_driver(                                          &
                       ,rainprod, evapprod                                &
                       ,qv_b4mp, qc_b4mp, qi_b4mp, qs_b4mp                &
 #endif
-                      ,refl_10cm                                         & ! HM, 9/22/09, add for refl
+                      ,refl_10cm,composite_refl_10cm,vt_dbz_wt           & ! HM, 9/22/09, add for refl
 ! YLIN
 ! Added the RI_CURR array to the call
                       ,ri_curr                                           &
@@ -62,8 +65,10 @@ SUBROUTINE microphysics_driver(                                          &
    USE module_state_description, ONLY :                                  &
                      KESSLERSCHEME, LINSCHEME, SBU_YLINSCHEME, WSM3SCHEME, WSM5SCHEME    &
                     ,WSM6SCHEME, ETAMPNEW, ETAMPOLD, THOMPSON, MORR_TWO_MOMENT     &
-                    ,GSFCGCESCHEME, WDM5SCHEME, WDM6SCHEME, NSSL_2MOM, NSSL_2MOMCCN  &
-                    ,MILBRANDT2MOM !,MILBRANDT3MOM
+                    ,GSFCGCESCHEME, WDM5SCHEME, WDM6SCHEME  &
+                    ,MILBRANDT2MOM  & !,MILBRANDT3MOM
+                    ,NSSL_2MOM, NSSL_2MOMCCN,NSSL_1MOM,NSSL_3MOM       &
+                    ,NSSL_2MOMHM,NSSL_3MOMHM,NSSL_1MOMLFO,NSSL_2MOMLGT
 #endif
 
 ! Model Layer
@@ -168,6 +173,11 @@ SUBROUTINE microphysics_driver(                                          &
 ! Qzh        hail             reflectivity (m6/kg)
 
 ! Qvolg        graupel   particle volume (m3/kg)
+! Qvolh        hail   particle volume (m3/kg)
+
+! Qsw         snow liquid    mixing ratio (kg/kg)
+! Qgw         graupel liquid mixing ratio (kg/kg)
+! Qhw         hail liquid    mixing ratio (kg/kg)
 
 !
 !----------------------------------------------------------------------
@@ -311,7 +321,11 @@ SUBROUTINE microphysics_driver(                                          &
 !
 ! Optional
 !
-   REAL, OPTIONAL, DIMENSION( ims:ime , kms:kme, jms:jme ) , INTENT(OUT) :: refl_10cm
+   REAL, OPTIONAL, DIMENSION( ims:ime , kms:kme, jms:jme ) , INTENT(OUT) :: refl_10cm, vt_dbz_wt
+   REAL, DIMENSION( ims:ime , jms:jme ), OPTIONAL, INTENT(INOUT) :: composite_refl_10cm
+
+   REAL, OPTIONAL, DIMENSION( ims:ime , kms:kme, jms:jme ) , INTENT(OUT) :: rscghis_3d
+   REAL, OPTIONAL, DIMENSION( ims:ime , jms:jme ), INTENT(INOUT) ::  rscghis_2d
 
    LOGICAL,  OPTIONAL,   INTENT(IN   )    :: channel_switch
    REAL, OPTIONAL,  INTENT(INOUT   ) :: naer  ! aerosol number concentration (/kg)
@@ -324,7 +338,8 @@ SUBROUTINE microphysics_driver(                                          &
                  ,qt_curr,qndrop_curr,qni_curr,qh_curr,qnh_curr   &
                  ,qns_curr,qnr_curr,qng_curr,qnn_curr,qnc_curr    &
                  ,qzr_curr,qzi_curr,qzs_curr,qzg_curr,qzh_curr    &
-                 ,qvolg_curr
+                 ,qvolg_curr,qvolh_curr                           &
+                 ,qsw_curr,qgw_curr,qhw_curr
 
    REAL, DIMENSION( ims:ime, kms:kme, jms:jme ),                  &
          OPTIONAL,                                                &
@@ -373,7 +388,9 @@ SUBROUTINE microphysics_driver(                                          &
 
    LOGICAL, OPTIONAL :: f_qv,f_qc,f_qr,f_qi,f_qs,f_qg,f_qndrop,f_qni,f_qt    &
                        ,f_qns,f_qnr,f_qng,f_qnn,f_qnc,f_qh,f_qnh,f_qzr       &
-                       ,f_qzi,f_qzs,f_qzg,f_qzh,f_qvolg
+                       ,f_qzi,f_qzs,f_qzg,f_qzh,f_qvolg,f_qvolh              &
+                       ,f_qsw,f_qgw,f_qhw
+
 
    LOGICAL, OPTIONAL, INTENT(IN) :: diagflag
    INTEGER, OPTIONAL, INTENT(IN) :: do_radar_ref
@@ -693,6 +710,117 @@ SUBROUTINE microphysics_driver(                                          &
 !         ENDIF
 
 #if (EM_CORE==1)
+    CASE (NSSL_1MOM)
+         CALL wrf_debug(100, 'microphysics_driver: calling nssl1mom')
+         IF (PRESENT (QV_CURR) .AND.                           &
+             PRESENT (QC_CURR) .AND.  &
+             PRESENT (QR_CURR) .AND.  &
+             PRESENT (QI_CURR) .AND.  &
+             PRESENT (QS_CURR) .AND.  &
+             PRESENT (QG_CURR) .AND.  &
+             PRESENT (QH_CURR) .AND.  &
+             PRESENT (RAINNC ) .AND. PRESENT (RAINNCV)   .AND. &
+             PRESENT (SNOWNC ) .AND. PRESENT (SNOWNCV)   .AND. &
+             PRESENT (HAILNC ) .AND. PRESENT (HAILNCV)   .AND. &
+             PRESENT (GRAUPELNC).AND.PRESENT (GRAUPELNCV).AND. &
+             PRESENT (Z      ) .AND. PRESENT ( W      )  .AND. &
+             PRESENT (QVOLG_CURR) ) THEN
+             
+
+         CALL nssl_2mom_driver(                          &
+                     ITIMESTEP=itimestep,                &
+                     TH=th,                              &
+                     QV=qv_curr,                         &
+                     QC=qc_curr,                         &
+                     QR=qr_curr,                         &
+                     QI=qi_curr,                         &
+                     QS=qs_curr,                         &
+                     QH=qg_curr,                         &
+                     QHL=qh_curr,                        &
+                     CCW=qnc_curr,                       &
+                     CRW=qnr_curr,                       &
+                     CCI=qni_curr,                       &
+                     CSW=qns_curr,                       &
+                     CHW=qng_curr,                       &
+                     CHL=qnh_curr,                       &
+                     VHW=qvolg_curr,                     &
+                     PII=pi_phy,                         &
+                     P=p,                                &
+                     W=w,                                &
+                     DZ=dz8w,                            &
+                     DTP=dt,                             &
+                     DN=rho,                             &
+                     RAINNC   = RAINNC,                  &
+                     RAINNCV  = RAINNCV,                 &
+                     SNOWNC   = SNOWNC,                  &
+                     SNOWNCV  = SNOWNCV,                 &
+                     HAILNC   = HAILNC,                  &
+                     HAILNCV  = HAILNCV,                 &
+                     GRPLNC   = GRAUPELNC,               &
+                     GRPLNCV  = GRAUPELNCV,              &
+                     SR=SR,                              &
+                     dbz      = refl_10cm,               &
+                     vzf      = vt_dbz_wt,               &
+                     compdbz  = composite_refl_10cm,     &
+                     diagflag = diagflag,                &
+                  IDS=ids,IDE=ide, JDS=jds,JDE=jde, KDS=kds,KDE=kde, &
+                  IMS=ims,IME=ime, JMS=jms,JME=jme, KMS=kms,KME=kme, &
+                  ITS=its,ITE=ite, JTS=jts,JTE=jte, KTS=kts,KTE=kte  &
+                                                                    )
+        ELSE
+           Call wrf_error_fatal( 'arguments not present for calling nssl_2mom')
+        ENDIF
+
+
+    CASE (NSSL_1MOMLFO)
+         CALL wrf_debug(100, 'microphysics_driver: calling nssl1mom')
+         IF (PRESENT (QV_CURR) .AND.                           &
+             PRESENT (QC_CURR) .AND.  &
+             PRESENT (QR_CURR) .AND.  &
+             PRESENT (QI_CURR) .AND.  &
+             PRESENT (QS_CURR) .AND.  &
+             PRESENT (QG_CURR) .AND.  &
+             PRESENT (RAINNC ) .AND. PRESENT (RAINNCV)   .AND. &
+             PRESENT (SNOWNC ) .AND. PRESENT (SNOWNCV)   .AND. &
+             PRESENT (GRAUPELNC).AND.PRESENT (GRAUPELNCV).AND. &
+             PRESENT (Z      ) .AND. PRESENT ( W      )  ) THEN
+             
+
+         CALL nssl_2mom_driver(                          &
+                     ITIMESTEP=itimestep,                &
+                     TH=th,                              &
+                     QV=qv_curr,                         &
+                     QC=qc_curr,                         &
+                     QR=qr_curr,                         &
+                     QI=qi_curr,                         &
+                     QS=qs_curr,                         &
+                     QH=qg_curr,                         &
+                     PII=pi_phy,                         &
+                     P=p,                                &
+                     W=w,                                &
+                     DZ=dz8w,                            &
+                     DTP=dt,                             &
+                     DN=rho,                             &
+                     RAINNC   = RAINNC,                  &
+                     RAINNCV  = RAINNCV,                 &
+                     SNOWNC   = SNOWNC,                  &
+                     SNOWNCV  = SNOWNCV,                 &
+                     GRPLNC   = GRAUPELNC,               &
+                     GRPLNCV  = GRAUPELNCV,              &
+                     SR=SR,                              &
+                     dbz      = refl_10cm,               &
+                     vzf      = vt_dbz_wt,               &
+                     compdbz  = composite_refl_10cm,     &
+                     diagflag = diagflag,                &
+                  IDS=ids,IDE=ide, JDS=jds,JDE=jde, KDS=kds,KDE=kde, &
+                  IMS=ims,IME=ime, JMS=jms,JME=jme, KMS=kms,KME=kme, &
+                  ITS=its,ITE=ite, JTS=jts,JTE=jte, KTS=kts,KTE=kte  &
+                                                                    )
+        ELSE
+           Call wrf_error_fatal( 'arguments not present for calling nssl_2mom')
+        ENDIF
+
+
     CASE (NSSL_2MOM)
          CALL wrf_debug(100, 'microphysics_driver: calling nssl2mom')
          IF (PRESENT (QV_CURR) .AND.                           &
@@ -743,6 +871,8 @@ SUBROUTINE microphysics_driver(                                          &
                      GRPLNCV  = GRAUPELNCV,              &
                      SR=SR,                              &
                      dbz      = refl_10cm,               &
+                     vzf      = vt_dbz_wt,               &
+                     compdbz  = composite_refl_10cm,     &
                      diagflag = diagflag,                &
                   IDS=ids,IDE=ide, JDS=jds,JDE=jde, KDS=kds,KDE=kde, &
                   IMS=ims,IME=ime, JMS=jms,JME=jme, KMS=kms,KME=kme, &
@@ -751,6 +881,70 @@ SUBROUTINE microphysics_driver(                                          &
         ELSE
            Call wrf_error_fatal( 'arguments not present for calling nssl_2mom')
         ENDIF
+
+    CASE (NSSL_2MOMLGT)
+         CALL wrf_debug(100, 'microphysics_driver: calling nssl2mom')
+         IF (PRESENT (QV_CURR) .AND.                           &
+             PRESENT (QC_CURR) .AND. PRESENT (QNC_CURR)  .AND. &
+             PRESENT (QR_CURR) .AND. PRESENT (QNR_CURR)  .AND. &
+             PRESENT (QI_CURR) .AND. PRESENT (QNI_CURR)  .AND. &
+             PRESENT (QS_CURR) .AND. PRESENT (QNS_CURR)  .AND. &
+             PRESENT (QG_CURR) .AND. PRESENT (QNG_CURR)  .AND. &
+             PRESENT (QH_CURR) .AND. PRESENT (QNH_CURR)  .AND. &
+             PRESENT (RAINNC ) .AND. PRESENT (RAINNCV)   .AND. &
+             PRESENT (SNOWNC ) .AND. PRESENT (SNOWNCV)   .AND. &
+             PRESENT (HAILNC ) .AND. PRESENT (HAILNCV)   .AND. &
+             PRESENT (GRAUPELNC).AND.PRESENT (GRAUPELNCV).AND. &
+             PRESENT (Z      ) .AND. PRESENT ( W      )  .AND. &
+             PRESENT (QVOLG_CURR) ) THEN
+             
+
+         CALL nssl_2mom_driver(                          &
+                     ITIMESTEP=itimestep,                &
+                     TH=th,                              &
+                     QV=qv_curr,                         &
+                     QC=qc_curr,                         &
+                     QR=qr_curr,                         &
+                     QI=qi_curr,                         &
+                     QS=qs_curr,                         &
+                     QH=qg_curr,                         &
+                     QHL=qh_curr,                        &
+                     CCW=qnc_curr,                       &
+                     CRW=qnr_curr,                       &
+                     CCI=qni_curr,                       &
+                     CSW=qns_curr,                       &
+                     CHW=qng_curr,                       &
+                     CHL=qnh_curr,                       &
+                     VHW=qvolg_curr,                     &
+                     PII=pi_phy,                         &
+                     P=p,                                &
+                     W=w,                                &
+                     DZ=dz8w,                            &
+                     DTP=dt,                             &
+                     DN=rho,                             &
+                     RAINNC   = RAINNC,                  &
+                     RAINNCV  = RAINNCV,                 &
+                     SNOWNC   = SNOWNC,                  &
+                     SNOWNCV  = SNOWNCV,                 &
+                     HAILNC   = HAILNC,                  &
+                     HAILNCV  = HAILNCV,                 &
+                     GRPLNC   = GRAUPELNC,               &
+                     GRPLNCV  = GRAUPELNCV,              &
+                     SR=SR,                              &
+                     dbz      = refl_10cm,               &
+                     vzf      = vt_dbz_wt,               &
+                     compdbz  = composite_refl_10cm,     &
+                     rscghis_3d = rscghis_3d,            &
+                     rscghis_2d = rscghis_2d,            &
+                     diagflag = diagflag,                &
+                  IDS=ids,IDE=ide, JDS=jds,JDE=jde, KDS=kds,KDE=kde, &
+                  IMS=ims,IME=ime, JMS=jms,JME=jme, KMS=kms,KME=kme, &
+                  ITS=its,ITE=ite, JTS=jts,JTE=jte, KTS=kts,KTE=kte  &
+                                                                    )
+        ELSE
+           Call wrf_error_fatal( 'arguments not present for calling nssl_2mom')
+        ENDIF
+
 
     CASE (NSSL_2MOMCCN)
          CALL wrf_debug(100, 'microphysics_driver: calling nssl_2momccn')
@@ -803,6 +997,8 @@ SUBROUTINE microphysics_driver(                                          &
                      GRPLNCV  = GRAUPELNCV,              &
                      SR=SR,                              &
                      dbz      = refl_10cm,               &
+                     vzf      = vt_dbz_wt,               &
+                     compdbz  = composite_refl_10cm,     &
                      diagflag = diagflag,                &
                   IDS=ids,IDE=ide, JDS=jds,JDE=jde, KDS=kds,KDE=kde, &
                   IMS=ims,IME=ime, JMS=jms,JME=jme, KMS=kms,KME=kme, &
@@ -810,6 +1006,205 @@ SUBROUTINE microphysics_driver(                                          &
                                                                     )
         ELSE
            Call wrf_error_fatal( 'arguments not present for calling nssl_2momccn')
+        ENDIF
+
+    CASE (NSSL_3MOM)
+         CALL wrf_debug(100, 'microphysics_driver: calling nssl2mom')
+         IF (PRESENT (QV_CURR) .AND.                           &
+             PRESENT (QC_CURR) .AND. PRESENT (QNC_CURR)  .AND. &
+             PRESENT (QR_CURR) .AND. PRESENT (QNR_CURR)  .AND. &
+             PRESENT (QI_CURR) .AND. PRESENT (QNI_CURR)  .AND. &
+             PRESENT (QS_CURR) .AND. PRESENT (QNS_CURR)  .AND. &
+             PRESENT (QG_CURR) .AND. PRESENT (QNG_CURR)  .AND. &
+             PRESENT (QH_CURR) .AND. PRESENT (QNH_CURR)  .AND. &
+             PRESENT (RAINNC ) .AND. PRESENT (RAINNCV)   .AND. &
+             PRESENT (SNOWNC ) .AND. PRESENT (SNOWNCV)   .AND. &
+             PRESENT (HAILNC ) .AND. PRESENT (HAILNCV)   .AND. &
+             PRESENT (GRAUPELNC).AND.PRESENT (GRAUPELNCV).AND. &
+             PRESENT (Z      ) .AND. PRESENT ( W      )  .AND. &
+             PRESENT (QVOLG_CURR).AND.PRESENT (QZH_CURR) .AND. &
+             PRESENT (QZR_CURR).AND. PRESENT (QZG_CURR)  ) THEN
+
+         CALL nssl_2mom_driver(                          &
+                     ITIMESTEP=itimestep,                &
+                     TH=th,                              &
+                     QV=qv_curr,                         &
+                     QC=qc_curr,                         &
+                     QR=qr_curr,                         &
+                     QI=qi_curr,                         &
+                     QS=qs_curr,                         &
+                     QH=qg_curr,                         &
+                     QHL=qh_curr,                        &
+                     ZRW=qzr_curr,                       &
+                     ZHW=qzg_curr,                       &
+                     ZHL=qzh_curr,                       &
+                     CCW=qnc_curr,                       &
+                     CRW=qnr_curr,                       &
+                     CCI=qni_curr,                       &
+                     CSW=qns_curr,                       &
+                     CHW=qng_curr,                       &
+                     CHL=qnh_curr,                       &
+                     VHW=qvolg_curr,                     &
+                     VHL=qvolh_curr,                     &
+                     PII=pi_phy,                         &
+                     P=p,                                &
+                     W=w,                                &
+                     DZ=dz8w,                            &
+                     DTP=dt,                             &
+                     DN=rho,                             &
+                     RAINNC   = RAINNC,                  &
+                     RAINNCV  = RAINNCV,                 &
+                     SNOWNC   = SNOWNC,                  &
+                     SNOWNCV  = SNOWNCV,                 &
+                     HAILNC   = HAILNC,                  &
+                     HAILNCV  = HAILNCV,                 &
+                     GRPLNC   = GRAUPELNC,               &
+                     GRPLNCV  = GRAUPELNCV,              &
+                     SR=SR,                              &
+                     dbz      = refl_10cm,               &
+                     vzf      = vt_dbz_wt,               &
+                     compdbz  = composite_refl_10cm,     &
+                     diagflag = diagflag,                &
+                  IDS=ids,IDE=ide, JDS=jds,JDE=jde, KDS=kds,KDE=kde, &
+                  IMS=ims,IME=ime, JMS=jms,JME=jme, KMS=kms,KME=kme, &
+                  ITS=its,ITE=ite, JTS=jts,JTE=jte, KTS=kts,KTE=kte  &
+                                                                    )
+        ELSE
+           Call wrf_error_fatal( 'arguments not present for calling nssl_2mom')
+        ENDIF
+
+    CASE (NSSL_2MOMHM)
+         CALL wrf_debug(100, 'microphysics_driver: calling nssl2mom')
+         IF (PRESENT (QV_CURR) .AND.                           &
+             PRESENT (QC_CURR) .AND. PRESENT (QNC_CURR)  .AND. &
+             PRESENT (QR_CURR) .AND. PRESENT (QNR_CURR)  .AND. &
+             PRESENT (QI_CURR) .AND. PRESENT (QNI_CURR)  .AND. &
+             PRESENT (QS_CURR) .AND. PRESENT (QNS_CURR)  .AND. &
+             PRESENT (QG_CURR) .AND. PRESENT (QNG_CURR)  .AND. &
+             PRESENT (QH_CURR) .AND. PRESENT (QNH_CURR)  .AND. &
+             PRESENT (RAINNC ) .AND. PRESENT (RAINNCV)   .AND. &
+             PRESENT (SNOWNC ) .AND. PRESENT (SNOWNCV)   .AND. &
+             PRESENT (HAILNC ) .AND. PRESENT (HAILNCV)   .AND. &
+             PRESENT (GRAUPELNC).AND.PRESENT (GRAUPELNCV).AND. &
+             PRESENT (Z      ) .AND. PRESENT ( W      )  .AND. &
+             PRESENT (QVOLG_CURR) .AND. PRESENT (QVOLH_CURR) .AND. &
+             PRESENT (QSW_CURR) .AND. PRESENT (QGW_CURR) .AND. &
+             PRESENT (QHW_CURR)  ) THEN
+             
+
+         CALL nssl_2mom_driver(                          &
+                     ITIMESTEP=itimestep,                &
+                     TH=th,                              &
+                     QV=qv_curr,                         &
+                     QC=qc_curr,                         &
+                     QR=qr_curr,                         &
+                     QI=qi_curr,                         &
+                     QS=qs_curr,                         &
+                     QH=qg_curr,                         &
+                     QHL=qh_curr,                        &
+                     CCW=qnc_curr,                       &
+                     CRW=qnr_curr,                       &
+                     CCI=qni_curr,                       &
+                     CSW=qns_curr,                       &
+                     CHW=qng_curr,                       &
+                     CHL=qnh_curr,                       &
+                     QSW=qsw_curr,                       &
+                     QHW=qgw_curr,                       &
+                     QHLW=qhw_curr,                      &
+                     VHW=qvolg_curr,                     &
+                     VHL=qvolh_curr,                     &
+                     PII=pi_phy,                         &
+                     P=p,                                &
+                     W=w,                                &
+                     DZ=dz8w,                            &
+                     DTP=dt,                             &
+                     DN=rho,                             &
+                     RAINNC   = RAINNC,                  &
+                     RAINNCV  = RAINNCV,                 &
+                     SNOWNC   = SNOWNC,                  &
+                     SNOWNCV  = SNOWNCV,                 &
+                     HAILNC   = HAILNC,                  &
+                     HAILNCV  = HAILNCV,                 &
+                     GRPLNC   = GRAUPELNC,               &
+                     GRPLNCV  = GRAUPELNCV,              &
+                     SR=SR,                              &
+                     dbz      = refl_10cm,               &
+                     vzf      = vt_dbz_wt,               &
+                     compdbz  = composite_refl_10cm,     &
+                     diagflag = diagflag,                &
+                  IDS=ids,IDE=ide, JDS=jds,JDE=jde, KDS=kds,KDE=kde, &
+                  IMS=ims,IME=ime, JMS=jms,JME=jme, KMS=kms,KME=kme, &
+                  ITS=its,ITE=ite, JTS=jts,JTE=jte, KTS=kts,KTE=kte  &
+                                                                    )
+        ELSE
+           Call wrf_error_fatal( 'arguments not present for calling nssl_2mom')
+        ENDIF
+
+    CASE (NSSL_3MOMHM)
+         CALL wrf_debug(100, 'microphysics_driver: calling nssl2mom')
+         IF (PRESENT (QV_CURR) .AND.                           &
+             PRESENT (QC_CURR) .AND. PRESENT (QNC_CURR)  .AND. &
+             PRESENT (QR_CURR) .AND. PRESENT (QNR_CURR)  .AND. &
+             PRESENT (QI_CURR) .AND. PRESENT (QNI_CURR)  .AND. &
+             PRESENT (QS_CURR) .AND. PRESENT (QNS_CURR)  .AND. &
+             PRESENT (QG_CURR) .AND. PRESENT (QNG_CURR)  .AND. &
+             PRESENT (QH_CURR) .AND. PRESENT (QNH_CURR)  .AND. &
+             PRESENT (RAINNC ) .AND. PRESENT (RAINNCV)   .AND. &
+             PRESENT (SNOWNC ) .AND. PRESENT (SNOWNCV)   .AND. &
+             PRESENT (HAILNC ) .AND. PRESENT (HAILNCV)   .AND. &
+             PRESENT (GRAUPELNC).AND.PRESENT (GRAUPELNCV).AND. &
+             PRESENT (Z      ) .AND. PRESENT ( W      )  .AND. &
+             PRESENT (QVOLG_CURR).AND.PRESENT (QZH_CURR) .AND. &
+             PRESENT (QZR_CURR).AND. PRESENT (QZG_CURR)  ) THEN
+
+         CALL nssl_2mom_driver(                          &
+                     ITIMESTEP=itimestep,                &
+                     TH=th,                              &
+                     QV=qv_curr,                         &
+                     QC=qc_curr,                         &
+                     QR=qr_curr,                         &
+                     QI=qi_curr,                         &
+                     QS=qs_curr,                         &
+                     QH=qg_curr,                         &
+                     QHL=qh_curr,                        &
+                     ZRW=qzr_curr,                       &
+                     ZHW=qzg_curr,                       &
+                     ZHL=qzh_curr,                       &
+                     QSW=qsw_curr,                       &
+                     QHW=qgw_curr,                       &
+                     QHLW=qhw_curr,                      &
+                     CCW=qnc_curr,                       &
+                     CRW=qnr_curr,                       &
+                     CCI=qni_curr,                       &
+                     CSW=qns_curr,                       &
+                     CHW=qng_curr,                       &
+                     CHL=qnh_curr,                       &
+                     VHW=qvolg_curr,                     &
+                     PII=pi_phy,                         &
+                     P=p,                                &
+                     W=w,                                &
+                     DZ=dz8w,                            &
+                     DTP=dt,                             &
+                     DN=rho,                             &
+                     RAINNC   = RAINNC,                  &
+                     RAINNCV  = RAINNCV,                 &
+                     SNOWNC   = SNOWNC,                  &
+                     SNOWNCV  = SNOWNCV,                 &
+                     HAILNC   = HAILNC,                  &
+                     HAILNCV  = HAILNCV,                 &
+                     GRPLNC   = GRAUPELNC,               &
+                     GRPLNCV  = GRAUPELNCV,              &
+                     SR=SR,                              &
+                     dbz      = refl_10cm,               &
+                     vzf      = vt_dbz_wt,               &
+                     compdbz  = composite_refl_10cm,     &
+                     diagflag = diagflag,                &
+                  IDS=ids,IDE=ide, JDS=jds,JDE=jde, KDS=kds,KDE=kde, &
+                  IMS=ims,IME=ime, JMS=jms,JME=jme, KMS=kms,KME=kme, &
+                  ITS=its,ITE=ite, JTS=jts,JTE=jte, KTS=kts,KTE=kte  &
+                                                                    )
+        ELSE
+           Call wrf_error_fatal( 'arguments not present for calling nssl_2mom')
         ENDIF
 #endif
 !

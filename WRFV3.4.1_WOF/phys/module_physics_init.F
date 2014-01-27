@@ -111,7 +111,14 @@ CONTAINS
 #endif
                          t00, p00, tlp,                          & !for obs-nudging
                          TYR,TYRA,TDLY,TLAG,NYEAR,NDAY,tmn_update,   &
-                         ACHFX,ACLHF,ACGRDFLX                    &
+                         ACHFX,ACLHF,ACGRDFLX,                   &
+                         nssl_cccn,                              &
+                         nssl_alphah,nssl_alphahl,               &
+                         nssl_cnoh, nssl_cnohl,                  &
+                         nssl_cnor, nssl_cnos,                   &
+                         nssl_rho_qh, nssl_rho_qhl,              &
+                         nssl_rho_qs,                            &
+                         nssl_myjensnum                          &
    ! OPTIONAL 
                          ,te_temf          & ! WA 12/21/09
                          ,cf3d_temf        & ! WA 9/27/10
@@ -413,6 +420,12 @@ CONTAINS
    TYPE(fdob_type), OPTIONAL, INTENT(INOUT) :: fdob
 #endif
    REAL, OPTIONAL, INTENT(IN) :: p00, t00, tlp   ! for obs-nudging base-state calcn
+   REAL, OPTIONAL, INTENT(IN) :: nssl_cccn, nssl_alphah, nssl_alphahl, &
+                         nssl_cnoh, nssl_cnohl,                  &
+                         nssl_cnor, nssl_cnos,                   &
+                         nssl_rho_qh, nssl_rho_qhl,              &
+                         nssl_rho_qs,                            &
+                         nssl_myjensnum
 
 ! WA 12/21/09
    REAL,OPTIONAL, DIMENSION( ims:ime , kms:kme , jms:jme ) , &
@@ -702,6 +715,7 @@ integer myproc
                 its, ite, jts, jte, kts, kte,                   &
                 ACHFX,ACLHF,ACGRDFLX,                           &
                 oml_hml0, omlcall,                              & !Optional oml
+                nssl_myjensnum,                                 &
                 TML,T0ML,HML,H0ML,HUML,HVML,TMOML               ) !Optional oml
 
    CALL wrf_debug ( 200 , 'module_start: phy_init: Before call to cu_init' )
@@ -739,6 +753,11 @@ integer myproc
                 F_ICE_PHY,F_RAIN_PHY,F_RIMEF_PHY,               &
                 mp_restart_state,tbpvs_state,tbpvs0_state,      &
                 allowed_to_read, start_of_simulation,           &
+                nssl_cccn, nssl_alphah, nssl_alphahl,           &
+                         nssl_cnoh, nssl_cnohl,                  &
+                         nssl_cnor, nssl_cnos,                   &
+                         nssl_rho_qh, nssl_rho_qhl,              &
+                         nssl_rho_qs,                            &
                 ids, ide, jds, jde, kds, kde,                   &
                 ims, ime, jms, jme, kms, kme,                   &
                 its, ite, jts, jte, kts, kte                    )
@@ -1447,6 +1466,7 @@ integer myproc
                 its, ite, jts, jte, kts, kte,                   &
                 ACHFX,ACLHF,ACGRDFLX,                           &
                 oml_hml0, omlcall,                              & !Optional oml
+                nssl_myjensnum,                                &
                 TML,T0ML,HML,H0ML,HUML,HVML,TMOML               ) !Optional oml
 !--------------------------------------------------------------------
    USE module_sf_sfclay
@@ -1677,6 +1697,7 @@ integer myproc
 ! Optional OML variables
    REAL,  DIMENSION( ims:ime , jms:jme ) , OPTIONAL, INTENT(INOUT) ::    &
                                         TML,T0ML,HML,H0ML,HUML,HVML,TMOML
+   REAL, OPTIONAL, INTENT(IN) :: nssl_myjensnum
    INTEGER,  OPTIONAL,  INTENT(IN) :: omlcall
    REAL,  OPTIONAL,  INTENT(IN) :: oml_hml0
    LOGICAL,  INTENT(IN) :: start_of_simulation
@@ -1732,7 +1753,8 @@ integer myproc
                          allowed_to_read ,                     &
                          ids, ide, jds, jde, kds, kde,         &
                          ims, ime, jms, jme, kms, kme,         &
-                         its, ite, jts, jte, kts, kte          )
+                         its, ite, jts, jte, kts, kte,         &
+                         nssl_myjensnum                        )
            isfc = 2
 
       CASE (QNSESFCSCHEME)
@@ -2444,6 +2466,11 @@ integer myproc
                       F_ICE_PHY,F_RAIN_PHY,F_RIMEF_PHY,           & ! for eta mp
                       mp_restart_state,tbpvs_state,tbpvs0_state,   & ! eta mp
                       allowed_to_read, start_of_simulation,       &
+                      nssl_cccn, nssl_alphah, nssl_alphahl,       &
+                         nssl_cnoh, nssl_cnohl,                  &
+                         nssl_cnor, nssl_cnos,                   &
+                         nssl_rho_qh, nssl_rho_qhl,              &
+                         nssl_rho_qs,                            &
                       ids, ide, jds, jde, kds, kde,               &
                       ims, ime, jms, jme, kms, kme,               &
                       its, ite, jts, jte, kts, kte                )
@@ -2473,6 +2500,12 @@ integer myproc
    LOGICAL , INTENT(IN)        :: restart
    LOGICAL , INTENT(OUT)       :: warm_rain,adv_moist_cond
    REAL    , INTENT(IN)        :: MPDT, DT, DX, DY
+   REAL, INTENT(IN), OPTIONAL  :: nssl_cccn, nssl_alphah, nssl_alphahl, &
+                                  nssl_cnoh, nssl_cnohl,                  &
+                                  nssl_cnor, nssl_cnos,                   &
+                                  nssl_rho_qh, nssl_rho_qhl,              &
+                                  nssl_rho_qs
+
    LOGICAL , INTENT(IN)        :: start_of_simulation
 
    INTEGER , INTENT(IN)        :: ids, ide, jds, jde, kds, kde,   &
@@ -2488,6 +2521,7 @@ integer myproc
 
 ! Local
    INTEGER :: i, j, itf, jtf
+   REAL, DIMENSION(20) :: nssl_params
 
    warm_rain = .false.
    adv_moist_cond = .true.
@@ -2502,6 +2536,19 @@ integer myproc
         GRAUPELNC(i,j) = 0.
      ENDDO
      ENDDO
+   ENDIF
+   
+   IF ( present( nssl_cccn ) ) THEN
+     nssl_params(1)  = nssl_cccn
+     nssl_params(2)  = nssl_alphah
+     nssl_params(3)  = nssl_alphahl
+     nssl_params(4)  = nssl_cnoh
+     nssl_params(5)  = nssl_cnohl
+     nssl_params(6)  = nssl_cnor
+     nssl_params(7)  = nssl_cnos
+     nssl_params(8)  = nssl_rho_qh
+     nssl_params(9)  = nssl_rho_qhl
+     nssl_params(10) = nssl_rho_qs
    ENDIF
 
    mp_select: SELECT CASE(config_flags%mp_physics)
@@ -2548,10 +2595,22 @@ integer myproc
      CASE (WDM6SCHEME)
           CALL wdm6init(rhoair0,rhowater,rhosnow,cliq,cpv,n_ccn0,allowed_to_read )
 #if (EM_CORE==1)
+     CASE (NSSL_1MOMLFO)
+         CALL nssl_2mom_init(ims,ime, jms,jme, kms,kme,nssl_params,ipctmp=0,mixphase=0,ihvol=-1) ! no separate hail
+     CASE (NSSL_1MOM)
+         CALL nssl_2mom_init(ims,ime, jms,jme, kms,kme,nssl_params,ipctmp=0,mixphase=0,ihvol=0)
      CASE (NSSL_2MOM)
-         CALL nssl_2mom_init(ims,ime, jms,jme, kms,kme)
+         CALL nssl_2mom_init(ims,ime, jms,jme, kms,kme,nssl_params,ipctmp=5,mixphase=0,ihvol=0)
+     CASE (NSSL_2MOMLGT)
+         CALL nssl_2mom_init(ims,ime, jms,jme, kms,kme,nssl_params,ipctmp=5,mixphase=0,ihvol=0, idonictmp=.true.)
      CASE (NSSL_2MOMCCN)
-         CALL nssl_2mom_init(ims,ime, jms,jme, kms,kme)
+         CALL nssl_2mom_init(ims,ime, jms,jme, kms,kme,nssl_params,ipctmp=5,mixphase=0,ihvol=0)
+     CASE (NSSL_3MOM)
+         CALL nssl_2mom_init(ims,ime, jms,jme, kms,kme,nssl_params,ipctmp=8,mixphase=0,ihvol=1)
+     CASE (NSSL_2MOMHM)
+         CALL nssl_2mom_init(ims,ime, jms,jme, kms,kme,nssl_params,ipctmp=5,mixphase=1,ihvol=1)
+     CASE (NSSL_3MOMHM)
+         CALL nssl_2mom_init(ims,ime, jms,jme, kms,kme,nssl_params,ipctmp=8,mixphase=1,ihvol=1)
 #endif
      CASE (ETAMPOLD)
          adv_moist_cond = .false.

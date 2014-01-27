@@ -341,7 +341,10 @@ module_mp_milbrandt2mom.o : ../frame/module_wrf_error.o \
 module_mp_thompson.o : ../frame/module_wrf_error.o \
 		module_mp_radar.o
 
-module_mp_nssl_2mom.o : ../frame/module_wrf_error.o \
+module_mp_nssl_2mom.F: module_mp_nssl_2mom.master.F
+	cpp -C -P -traditional-cpp module_mp_nssl_2mom.master.F >! module_mp_nssl_2mom.F
+
+module_mp_nssl_2mom.o : module_mp_nssl_2mom.F ../frame/module_wrf_error.o \
 		../share/module_model_constants.o
 
 module_ra_goddard.o : ../frame/module_wrf_error.o
@@ -597,7 +600,9 @@ module_surface_driver.o: \
 		../share/module_model_constants.o  
 
 module_diagnostics.o: ../frame/module_dm.o \
-		../share/module_model_constants.o
+		../share/module_model_constants.o \
+                      module_mp_thompson.o
+
 
 
 module_mixactivate.o: \

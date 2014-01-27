@@ -57,6 +57,8 @@
       REAL :: DZETA1,DZETA2,FH01,FH02,ZTMAX1,ZTMAX2,ZTMIN1,ZTMIN2
 !
       REAL,DIMENSION(KZTM) :: PSIH1,PSIH2,PSIM1,PSIM2
+      
+      REAL, PRIVATE :: ENSNUM = 0.0
 !
 !----------------------------------------------------------------------
 !
@@ -1058,7 +1060,8 @@ CONTAINS
      &                     ,ALLOWED_TO_READ                            &
      &                     ,IDS,IDE,JDS,JDE,KDS,KDE                    &
      &                     ,IMS,IME,JMS,JME,KMS,KME                    &
-     &                     ,ITS,ITE,JTS,JTE,KTS,KTE)
+     &                     ,ITS,ITE,JTS,JTE,KTS,KTE                    &
+     &                     ,nssl_myjensnum )
 !----------------------------------------------------------------------
       IMPLICIT NONE
 !----------------------------------------------------------------------
@@ -1068,6 +1071,8 @@ CONTAINS
      &                     ,IMS,IME,JMS,JME,KMS,KME                    &
      &                     ,ITS,ITE,JTS,JTE,KTS,KTE
 !
+      REAL,OPTIONAL,INTENT(IN) :: nssl_myjensnum
+      
       INTEGER,DIMENSION(IMS:IME,JMS:JME),INTENT(IN) :: IVGTYP
 !
       INTEGER,DIMENSION(IMS:IME,JMS:JME),INTENT(INOUT) :: LOWLYR
@@ -1106,6 +1111,8 @@ CONTAINS
       JTF=MIN0(JTE,JDE-1)
       KTF=MIN0(KTE,KDE-1)
       ITF=MIN0(ITE,IDE-1)
+      
+      ENSNUM = nssl_myjensnum
 !
 !
 !***  FOR NOW, ASSUME SIGMA MODE FOR LOWEST MODEL LAYER
